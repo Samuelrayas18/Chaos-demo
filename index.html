@@ -1,103 +1,142 @@
-<!-- index.html: Simple chaos demo -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Chaos Theory Demo</title>
+  <meta charset="UTF-8" />
+  <title>Chaos Theory Demo – Lorenz Attractor</title>
   <style>
-    body { margin: 0; font-family: sans-serif; background: #111; color: #eee; }
-    #controls { padding: 10px; background: #222; display: flex; align-items: center; gap: 10px; }
-    #canvas { display: block; background: #000; }
-    label { font-size: 14px; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #0ff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      height: 100%;
+      overflow: hidden;
+    }
+    #ui {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    input[type="range"] {
+      width: 160px;
+    }
   </style>
 </head>
 <body>
-  <div id="controls">
-    <label>Starting angle offset:
-      <input id="angle" type="range" min="-0.05" max="0.05" step="0.001" value="0">
-    </label>
-    <button id="run">Run</button>
-    <span id="info"></span>
+  <div id="ui">
+    <div><strong>Chaos Theory Demo – Lorenz Attractor</strong></div>
+    <div style="margin-top:4px;">
+      Initial X offset:
+      <input id="offset" type="range" min="-2" max="2" step="0.05" value="0" />
+      <span id="offsetValue">0.00</span>
+    </div>
+    <div style="margin-top:4px;">
+      Click &ldquo;Restart&rdquo; after changing the slider to see how
+      tiny initial changes give very different paths.
+    </div>
+    <button id="restart" style="margin-top:6px;">Restart</button>
   </div>
-  <canvas id="canvas" width="800" height="500"></canvas>
+
+  <canvas id="canvas"></canvas>
 
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const angleSlider = document.getElementById('angle');
-    const runBtn = document.getElementById('run');
-    const info = document.getElementById('info');
+    const offsetSlider = document.getElementById('offset');
+    const offsetValue = document.getElementById('offsetValue');
+    const restartBtn = document.getElementById('restart');
 
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-    function resetField() {
+    let X, Y, Z, t, animationId;
+
+    function initState() {
+      // Slightly vary the initial X by the slider value
+      const off = parseFloat(offsetSlider.value);
+      offsetValue.textContent = off.toFixed(2);
+
+      X = 1 + off;
+      Y = 1;
+      Z = 1;
+      t = 0;
+    }
+
+    function step() {
+      // Clear canvas
       ctx.fillStyle = 'black';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw “gravity well”
-      ctx.fillStyle = '#333';
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 80, 0, Math.PI * 2);
-      ctx.fill();
 
-      ctx.fillStyle = '#0f0';
-      ctx.fillText('Try small angle changes → huge path changes', 10, 20);
+      // We follow Frank Force's Lorenz update scheme (scaled for smoothness)
+      // and only draw after a "warm-up" so we see the attractor, not the approach.
+      const iterations = 4000;
+      const warmup = 2000;
+
+      for (let i = 0; i < iterations; i++) {
+        // Lorenz-like updates (adapted from the dweet)
+        X += (Y - X) / 13;
+        Y += (28 - Z) * X / 99;
+        Z += (X * Y - Z) / 39;
+
+        if (i > warmup) {
+          // Slowly rotate around Z axis using time t
+          const cx = canvas.width / 2;
+          const cy = canvas.height * 0.7;
+          const scaleXY = Math.min(canvas.width, canvas.height) * 0.025;
+          const scaleZ = Math.min(canvas.width, canvas.height) * 0.015;
+
+          const cosT = Math.cos(t);
+          const sinT = Math.sin(t);
+
+          const px = cx + (X * cosT - Y * sinT) * scaleXY;
+          const py = cy - Z * scaleZ;
+
+          if (i === warmup + 1) {
+            ctx.moveTo(px, py);
+          } else {
+            ctx.lineTo(px, py);
+          }
+        }
+
+        t += 0.0008; // small time increment for slow rotation
+      }
+
+      ctx.fillStyle = '#0ff';
+      ctx.fill('evenodd');
+
+      animationId = requestAnimationFrame(step);
     }
 
-    function runSim(offsetAngle) {
-      resetField();
-      info.textContent = `Angle offset: ${offsetAngle.toFixed(3)} rad`;
-
-      let x = centerX - 250;
-      let y = centerY;
-      const speed = 3;
-      const baseAngle = 0;
-      let vx = speed * Math.cos(baseAngle + offsetAngle);
-      let vy = speed * Math.sin(baseAngle + offsetAngle);
-
-      ctx.strokeStyle = '#0ff';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-
-      let steps = 0;
-      function step() {
-        steps++;
-
-        // Simple chaotic force: attraction to center plus nonlinear twist
-        const dx = centerX - x;
-        const dy = centerY - y;
-        const r2 = dx*dx + dy*dy + 0.01;
-        const force = 2000 / r2; // stronger near center
-
-        // Nonlinear “twist” term
-        const twist = 0.001 * Math.sin(x * 0.03) * Math.cos(y * 0.02);
-
-        vx += (dx * force * 0.0005) + twist * vy;
-        vy += (dy * force * 0.0005) - twist * vx;
-
-        x += vx;
-        y += vy;
-
-        ctx.lineTo(x, y);
-        ctx.stroke();
-
-        // Stop if it leaves the screen or after many steps
-        if (x < 0 || x > canvas.width || y < 0 || y > canvas.height || steps > 4000) {
-          return;
-        }
-        requestAnimationFrame(step);
-      }
+    function restart() {
+      cancelAnimationFrame(animationId);
+      initState();
       step();
     }
 
-    runBtn.addEventListener('click', () => {
-      const offset = parseFloat(angleSlider.value);
-      runSim(offset);
+    restartBtn.addEventListener('click', restart);
+    offsetSlider.addEventListener('input', () => {
+      offsetValue.textContent = parseFloat(offsetSlider.value).toFixed(2);
     });
 
-    resetField();
+    // Initial run
+    initState();
+    step();
   </script>
 </body>
 </html>
